@@ -1,0 +1,450 @@
+
+                                                 Kubernets Installation
+                                                ----------------------------------
+Step-1:Create three Servers: 
+---------------------------------------
+       1 - Kubernetes Master (Ubuntu 20.04 --> 4 Gb RAM, 2 core)
+       2 - Kubernetes Worker (Ubuntu 20.04 --> 1 Gb RAM, 1 core)
+
+Step-2:To install Docker:  (three nodes)
+-----------------------------------
+# sudo apt update
+# sudo apt -y full-upgrade
+# curl -fsSL https://get.docker.com -o get-docker.sh
+# sudo sh get-docker.sh
+ 
+Step 3: Install Kubeadm  (three Nodes)
+------------------------------------
+Once the docker is installed, the next step is to install kubeadm on all three machines.
+
+Install transport HTTPS package & Add Kubernetes package repository key:
+
+# sudo apt -y install curl apt-transport-https
+# curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+# echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+# sudo apt update
+# sudo apt -y install kubelet kubeadm kubectl
+# sudo apt-mark hold kubelet kubeadm kubectl
+# rm /etc/containerd/config.toml
+# systemctl restart containerd
+ 
+
+Step-4: Create a Kubernetes cluster  (only on Master)
+----------------------------------------------------
+ 
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 172.31.0.78:6443 --token f9dcrj.gdsy0dah8dlftv72 \
+        --discovery-token-ca-cert-hash sha256:19dc06bfce2013c2b375e6a8cfce2f1d3d72c3a4bf87b1967680a818493a7459
+
+
+  # mkdir -p $HOME/.kube
+  # sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  # sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Step-5: Execute this token on Nodes  (only on Nodes)
+----------------------------------------------------
+kubeadm join 172.31.12.101:6443 --token igpzx3.ueohc7zs8nf9ud1a \
+        --discovery-token-ca-cert-hash sha256:eeba810af0264e16951f3adc532b2e402413801e34a5494a8a4e3d7c4bba35f1
+
+
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
+
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
+
+# kubectl get nodes
+NAME               STATUS     ROLES           AGE     VERSION
+ip-172-31-0-78     NotReady   control-plane   3m15s   v1.26.0
+ip-172-31-39-239   NotReady   <none>          20s     v1.26.0
+ip-172-31-46-21    NotReady   <none>          12s     v1.26.0
+
+
+Step-6: create Kubernetes network (on Master)
+----------------------------------------------------
+kubectl apply -f https://github.com/coreos/flannel/raw/master/Documentation/kube-flannel.yml
+
+
+namespace/kube-flannel created
+clusterrole.rbac.authorization.k8s.io/flannel created
+clusterrolebinding.rbac.authorization.k8s.io/flannel created
+serviceaccount/flannel created
+configmap/kube-flannel-cfg created
+daemonset.apps/kube-flannel-ds created
+
+
+# kubectl get nodes
+NAME               STATUS   ROLES           AGE     VERSION
+ip-172-31-0-78     Ready    control-plane   4m50s   v1.26.0
+ip-172-31-39-239   Ready    <none>          115s    v1.26.0
+ip-172-31-46-21    Ready    <none>          107s    v1.26.0
+
+
+
+Single Container Pod:
+--------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name:  my-demo-pod
+spec:
+  containers:
+  - name:  my-demo-container
+    image: nginx
+    ports:
+    - containerPort: 80
+
+
+# kubectl create -f PodExample1.yml
+pod/my-demo-pod created
+
+# kubectl get pods
+NAME          READY   STATUS              RESTARTS   AGE
+my-demo-pod   0/1     ContainerCreating   0          13s
+
+
+Multi-container Pod:
+------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mc1
+spec:
+  volumes:
+  - name: html
+    emptyDir: {}
+  containers:
+  - name: 1st
+    image: nginx
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html
+  - name: 2nd
+    image: debian
+    volumeMounts:
+    - name: html
+      mountPath: /html
+    command: ["/bin/sh", "-c"]
+    args:
+      - while true; do
+          date >> /html/index.html;
+          sleep 1;
+        done
+
+
+# kubectl create -f PodExample3.yml
+pod/mc1 created
+
+
+# kubectl get pods
+NAME          READY   STATUS              RESTARTS   AGE
+mc1           0/2     ContainerCreating   0          16s
+my-demo-pod   0/1     ContainerCreating   0          4m35s
+
+
+ReplicationController (RC)
+---------------------------------------
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: tomcat-rc
+spec:
+  replicas: 3
+  selector:
+    app: mytom
+  template:
+    metadata:
+      labels:
+        app: mytom
+        ver: "1.0"
+    spec:
+      containers:
+      - name: tomcat-pod
+        image: tomcat:8.0
+        ports:
+        - containerPort: 8080
+
+
+
+# kubectl create -f rc2.yml
+replicationcontroller/tomcat-rc created
+
+# kubectl get rc
+NAME        DESIRED   CURRENT   READY   AGE
+tomcat-rc   3         3         2       9s
+
+
+# kubectl get pods
+NAME              READY   STATUS    RESTARTS   AGE
+tomcat-rc-ffj85   1/1     Running   0          69s
+tomcat-rc-rzpd8   1/1     Running   0          69s
+tomcat-rc-vlnzd   1/1     Running   0          69s
+
+# kubectl describe rc tomcat-rc
+Name:         tomcat-rc
+Namespace:    default
+Selector:     app=mytom
+Labels:       app=mytom
+              ver=1.0
+Annotations:  <none>
+Replicas:     3 current / 3 desired
+Pods Status:  3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=mytom
+           ver=1.0
+  Containers:
+   tomcat-pod:
+    Image:        tomcat:8.0
+    Port:         8080/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age   From                    Message
+  ----    ------            ----  ----                    -------
+  Normal  SuccessfulCreate  107s  replication-controller  Created pod: tomcat-rc-ffj85
+  Normal  SuccessfulCreate  107s  replication-controller  Created pod: tomcat-rc-rzpd8
+  Normal  SuccessfulCreate  107s  replication-controller  Created pod: tomcat-rc-vlnzd
+
+
+# kubectl scale --replicas=5 rc/tomcat-rc
+replicationcontroller/tomcat-rc scaled
+
+# kubectl get rc
+NAME        DESIRED   CURRENT   READY   AGE
+tomcat-rc   5         5         5       3m48s
+
+# kubectl delete rc tomcat-rc
+replicationcontroller "tomcat-rc" deleted
+
+
+                                        Kubernets Services
+                                       ------------------------------
+# kubectl get svc
+NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   4h13m
+
+
+Node Port Service:
+----------------------------
+Step-1:  create a Pod 
+-------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+ name: dev-pod
+ labels:
+   app: dev-pod
+spec:
+ containers:
+ - name: dev-pod-container
+   image: sathyadevops/devops_tom
+   ports:
+   - name: dev-port
+     containerPort: 8080
+
+# kubectl create -f npod.yml
+pod/dev-pod created
+
+# kubectl get pods
+NAME      READY   STATUS    RESTARTS   AGE
+dev-pod   1/1     Running   0          9s
+
+Step-2:  create a Node port:
+----------------------------------------
+# cat ndport.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nodeport-service
+spec:
+  selector:
+    app: dev-pod
+  type: NodePort
+  ports:
+  - name: my-nodeport
+    port: 9090
+    targetPort: dev-port
+    nodePort: 30036
+    protocol: TCP
+
+
+# kubectl create -f ndport.yml
+service/my-nodeport-service created
+
+# kubectl get svc
+NAME                  TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+kubernetes            ClusterIP   10.96.0.1       <none>        443/TCP          4h21m
+my-nodeport-service   NodePort    10.101.112.34   <none>        9090:30036/TCP   9s
+
+Load Balancer:
+------------------------
+# cat lbport.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-loadbal-service
+spec:
+  selector:
+    app: dev-pod
+  type: LoadBalancer
+  ports:
+  - name: my-loadbal-port
+    port: 80
+    targetPort: dev-port
+    protocol: TCP
+
+
+# kubectl create -f lbport.yml
+service/my-loadbal-service created
+
+# kubectl get svc
+NAME                  TYPE           CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+kubernetes            ClusterIP      10.96.0.1        <none>        443/TCP          4h36m
+my-loadbal-service    LoadBalancer   10.101.141.230   <pending>     80:30062/TCP     56s
+my-nodeport-service   NodePort       10.101.112.34    <none>        9090:30036/TCP   14m
+
+
+Kubernetes Deployment:
+-------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+
+# kubectl create -f deployment.yml
+deployment.apps/nginx-deployment created
+
+
+# kubectl get deployment
+NAME               READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3/3     3            3           25s
+
+
+# kubectl get pods
+NAME                                READY   STATUS    RESTARTS   AGE
+dev-pod                             1/1     Running   0          28m
+nginx-deployment-57c68fcd95-2fb65   1/1     Running   0          42s
+nginx-deployment-57c68fcd95-487x5   1/1     Running   0          42s
+nginx-deployment-57c68fcd95-zrhrm   1/1     Running   0          42s
+
+
+# kubectl describe deployment nginx-deployment
+Name:                   nginx-deployment
+Namespace:              default
+CreationTimestamp:      Wed, 18 Jan 2023 04:02:25 +0000
+Labels:                 app=nginx
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=nginx
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=nginx
+  Containers:
+   nginx:
+    Image:        nginx:1.7.9
+    Port:         80/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   nginx-deployment-57c68fcd95 (3/3 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  83s   deployment-controller  Scaled up replica set nginx-deployment-57c68fcd95 to 3
+
+
+# kubectl set image deployment nginx-deployment nginx=nginx:1.9.1
+deployment.apps/nginx-deployment image updated
+
+
+# kubectl describe deployment nginx-deployment
+Name:                   nginx-deployment
+Namespace:              default
+CreationTimestamp:      Wed, 18 Jan 2023 04:02:25 +0000
+Labels:                 app=nginx
+Annotations:            deployment.kubernetes.io/revision: 2
+Selector:               app=nginx
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=nginx
+  Containers:
+   nginx:
+    Image:        nginx:1.9.1
+    Port:         80/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   nginx-deployment-f5d9744f (3/3 replicas created)
+Events:
+  Type    Reason             Age    From                   Message
+  ----    ------             ----   ----                   -------
+  Normal  ScalingReplicaSet  3m51s  deployment-controller  Scaled up replica set nginx-deployment-57c68fcd95 to 3
+  Normal  ScalingReplicaSet  32s    deployment-controller  Scaled up replica set nginx-deployment-f5d9744f to 1
+  Normal  ScalingReplicaSet  25s    deployment-controller  Scaled down replica set nginx-deployment-57c68fcd95 to 2 from 3
+  Normal  ScalingReplicaSet  25s    deployment-controller  Scaled up replica set nginx-deployment-f5d9744f to 2 from 1
+  Normal  ScalingReplicaSet  18s    deployment-controller  Scaled down replica set nginx-deployment-57c68fcd95 to 1 from 2
+  Normal  ScalingReplicaSet  18s    deployment-controller  Scaled up replica set nginx-deployment-f5d9744f to 3 from 2
+  Normal  ScalingReplicaSet  17s    deployment-controller  Scaled down replica set nginx-deployment-57c68fcd95 to 0 from 1
+
+# kubectl edit deployment nginx-deployment
+deployment.apps/nginx-deployment edited
