@@ -1,0 +1,548 @@
+
+                                      Ansible-Configuration
+                                     -----------------------------------
+Step-A:  Create Three Servers (EC2-Instances)
+--------------------------------------------------------------------
+      1 - Ansible-Master (Ubuntu)
+      2 - Nodes (Ubuntu, Amazon Linux)
+
+Step-B:  SSH(Secure Shell) Configuration
+------------------------------------------------------------
+    # whoami
+    # sudo  su  -           ---> to switch root user
+
+ Step-1:  to change root password : 
+------------------------------------------------
+               node# passwd  root
+       Enter new passwd :  root
+
+ Step-2:  to configure ssh: 
+------------------------------------
+               node# vi /etc/ssh/sshd_config
+        [press 'i' for insert mode]
+	PermitRootLogin   yes
+	PasswordAuthentication   yes
+        [press 'Esc']
+        [:wq  ---> write and quit]
+
+ Step-3: to restart ssh service:
+ -----------------------------------------
+              node# service ssh restart         (for Ubuntu nodes)
+                                  [OR]
+              node# systemctl restart sshd   (for Redhat nodes)
+
+ Step-4: to Connect with Nodes:
+----------------------------------------------
+              node# hostname  -i         (to get an  Private IP-Address)
+             [OR]  # ifconfig      
+             [OR]  # ip  a         
+
+              node# curl ifconfig.me     (to get an  Public IP-Address)
+               [OR]   curl ifconfig.in
+
+              node# hostname  -f         (to get a Host Name / FQDN)
+  
+              mstr#  ssh  <node-IP>
+
+
+
+                                Password less Authentication  (SSH-Keys)
+                                -------------------------------------------------------------
+ Step-1:  to generate a Key-pair
+------------------------------------------
+             mstr#  ls  -a          (to list hidden files)
+             mstr#  cd .ssh   
+             mstr#  ssh-keygen
+             mstr#  ls
+             id_rsa          (private key)
+             id_rsa.pub   (public key)
+
+ Step-2:  to send public key to nodes
+----------------------------------------------------
+          mstr#  ssh-copy-id   <node IP Address>
+
+ Step-3: to Connect with Nodes:
+----------------------------------------------
+              mstr#  ssh  <node IP>
+
+
+                                     sshpass
+                                 -----------------
+Ex:
+      # apt-get install sshpass
+
+      # sshpass -p passwd ssh 172.31.28.166
+
+      # sshpass -f  pwd_file ssh 172.31.28.166
+
+
+                                   SCP (Secure Copy)
+                                 ------------------------------
+ Syntax:
+    #  scp -i  [private key]  <file name> [user@]<ip addr>:<path>
+ 
+ Ex:
+    #  scp -i ~/.ssh/id_rsa demo.txt   root@10.142.0.14:/opt
+    #  scp demo.txt 10.142.0.15:/tmp
+    #  sshpass -p passwd scp demo.java 10.142.0.14:/tmp
+
+
+
+Step-C:  Ansible Installation :
+-------------------------------------------
+    # apt-get update
+    # apt-get install software-properties-common -y
+    # apt-add-repository ppa:ansible/ansible
+    # apt-get update
+    # apt-get install ansible -y
+
+    # ansible --version
+ansible [core 2.12.10]
+  config file = /etc/ansible/ansible.cfg
+  configured module search path = ['/root/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3/dist-packages/ansible
+  ansible collection location = /root/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible
+  python version = 3.8.10 (default, Jun 22 2022, 20:18:18) [GCC 9.4.0]
+  jinja version = 2.10.1
+  libyaml = True
+
+
+Step-D:  Ansible Configuration
+---------------------------------------------
+  # cd /etc/ansible/
+  # ls 
+ansible.cfg  hosts  roles
+
+  # vi hosts
+
+[ubnt]
+172.31.40.70
+[cent]
+172.31.45.7
+
+ # vi ~/ansible.cfg
+[defaults]
+interpreter_python=auto_silent
+
+
+# ansible all -m ping
+[WARNING]: Platform linux on host 172.31.47.215 is using the discovered Python
+interpreter at /usr/bin/python3.7, but future installation of another Python
+interpreter could change the meaning of that path. See
+https://docs.ansible.com/ansible-
+core/2.12/reference_appendices/interpreter_discovery.html for more information.
+172.31.47.215 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3.7"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+172.31.40.70 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+
+
+in Node-2:
+----------------
+Google ---> epel repo for amazon linux
+ # amazon-linux-extras install epel -y
+
+
+                                Ansible Ad-Hoc commands
+                               ------------------------------------------
+  # ansible all --list-hosts
+     hosts (2):
+      172.31.40.70
+      172.31.47.215
+
+  # ansible all -m ping
+  # ansible all -m setup
+  # ansible all -m setup | grep ansible_distribution
+  # ansible all -m setup -a "filter='ansible_distribution'"
+  # ansible all -m setup -a "filter='ansible_pkg_mgr'"
+  # ansible all -l ubnt -m setup -a "filter='ansible_pkg_mgr'"
+  # ansible all -m command -a "uptime"
+  # ansible all -m shell -a "date; cal"
+
+  # ansible all -m raw -a "mkdir /tmp/DEVOPS"
+  # ansible all -m raw -a "touch /tmp/SAMPLE.TXT"
+  # ansible all -l ubnt -m raw -a "apt-get install git-core -y"
+  # ansible all -l 172.31.47.215 -m raw -a "yum install git-core -y"
+
+# ansible all -l ubnt -m apt -a "name=apache2 state=present"
+# ansible all -l ubnt -m apt -a "name=apache2 state=absent"
+# ansible all -l cent -m yum -a "name=httpd state=latest"
+# ansible all -l ubnt -m service -a "name=apache2 state=started"
+# ansible all -l cent -m systemd -a "name=httpd state=started"
+# ansible all -m group -a "name=devops state=present"
+# ansible all -m user -a "name=john group=devops state=present"
+
+run on Nodes:
+--------------------
+  # cat /etc/passwd   ---> to list users
+  # cat /etc/group     ---> to list groups
+  # id john
+uid=1001(john) gid=1001(devops) groups=1001(devops)
+--------------------
+
+# ansible all -m file -a "name=/opt/DEMO.TXT state=touch"
+# ansible all -m file -a "name=/opt/MYDIR state=directory"
+# ansible all -m file -a "name=/opt/MYDIR state=absent"
+# ansible all -m file -a "name=/opt/DEMO.TXT mode='0777' owner='john' group='devops'"
+
+# ansible all -m copy -a "src='/root/DEVOPS.TXT' dest='/opt/DEVOPS.TXT' "
+
+ # ansible all -m cron -a "name='myjob' job='cat /var/log/messages >> /tmp/mylogs' minute='30' hour='5' "
+
+
+                                          Ansible Playbooks
+                                         ----------------------------- 
+Playbook-1:
+-----------------
+---
+- hosts: all
+  remote_user: root
+  gather_facts: true
+  tasks:
+  - name: to copy a file
+    copy:
+      src: /root/files/demo.txt
+      dest: /opt/demo.txt
+
+  - name: to display message
+    debug:
+      msg: file copied!
+
+
+# ansible-playbook playbooks/pb1.yml --syntax-check
+
+# ansible-playbook playbooks/pb1.yml
+
+PLAY [all] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [172.31.47.215]
+ok: [172.31.40.70]
+
+TASK [to copy a file] **********************************************************
+ok: [172.31.40.70]
+ok: [172.31.47.215]
+
+TASK [to display message] ******************************************************
+ok: [172.31.40.70] => {
+    "msg": "file copied!"
+}
+ok: [172.31.47.215] => {
+    "msg": "file copied!"
+}
+
+PLAY RECAP *********************************************************************
+172.31.40.70               : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+172.31.47.215              : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+root@ip-172-31-37-58:~#
+root@ip-172-31-37-58:~# ansible-playbook playbooks/pb1.yml
+
+PLAY [all] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [172.31.47.215]
+ok: [172.31.40.70]
+
+TASK [to copy a file] **********************************************************
+changed: [172.31.40.70]
+changed: [172.31.47.215]
+
+TASK [to display message] ******************************************************
+ok: [172.31.40.70] => {
+    "msg": "file copied!"
+}
+ok: [172.31.47.215] => {
+    "msg": "file copied!"
+}
+
+PLAY RECAP *********************************************************************
+172.31.40.70               : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+172.31.47.215              : ok=3    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+root@ip-172-31-37-58:~#
+
+
+Playbook-2:
+-----------------
+---
+- hosts: ubnt
+  remote_user: root
+  gather_facts: false
+  tasks:
+  - name: to update repo
+    raw: apt-get -y update
+
+  - name: to install apache2
+    apt: name=apache2 state=present
+
+  - name: to deploy a file
+    copy:
+      src: /root/files/index.html
+      dest: /var/www/html/index.html
+
+  - name: to start service
+    service: name=apache2 state=started
+
+
+# ansible-playbook playbooks/pb1.yml
+
+PLAY [ubnt] ********************************************************************
+
+TASK [to update repo] **********************************************************
+changed: [172.31.40.70]
+
+TASK [to install apache2] ******************************************************
+changed: [172.31.40.70]
+
+TASK [to deploy a file] ********************************************************
+ok: [172.31.40.70]
+
+TASK [to start service] ********************************************************
+ok: [172.31.40.70]
+
+PLAY RECAP *********************************************************************
+172.31.40.70               : ok=4    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+
+
+Playbook-3:
+-----------------
+# cat playbooks/pb1.yml
+---
+- hosts: 172.31.47.215
+  become: true
+  gather_facts: false
+  vars:
+  - pack1: java
+  - pack2: tomcat
+  tasks:
+  - name: to install {{pack1}}
+    package: name={{pack1}} update_cache=yes state=latest
+
+  - name: to install {{pack2}}
+    yum: name={{pack2}} update_cache=yes state=latest
+
+  - name: to deploy a war file
+    copy:
+      src: /root/files/sample.war
+      dest: /var/lib/tomcat/webapps/sample.war
+
+  - name: to start {{pack2}}
+    systemd: name={{pack2}} state=started
+
+
+# ansible-playbook playbooks/pb1.yml
+
+PLAY [172.31.47.215] ***********************************************************
+
+TASK [to install java] *********************************************************
+ok: [172.31.47.215]
+
+TASK [to install tomcat] *******************************************************
+ok: [172.31.47.215]
+
+TASK [to deploy a war file] ****************************************************
+changed: [172.31.47.215]
+
+TASK [to start tomcat] *********************************************************
+changed: [172.31.47.215]
+
+PLAY RECAP *********************************************************************
+172.31.47.215              : ok=4    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+
+
+Playbook-4:
+-----------------
+# cat playbooks/pb1.yml
+---
+- hosts: all
+  become: true
+  gather_facts: false
+  vars:
+  - pack1: mysql-server
+  - pack2: mariadb-server
+  tasks:
+  - name: to install {{pack1}}
+    package: name={{pack1}} update_cache=yes state=latest
+    when: ansible_distribution=='Ubuntu'
+    notify:
+      - start mysql
+
+  - name: to install {{pack2}}
+    package: name={{pack2}} update_cache=yes state=latest
+    when: ansible_distribution=='Amazon'
+    notify:
+      - start mariadb
+  handlers:
+  - name: start mysql
+    service: name=mysql state=started
+
+  - name: start mariadb
+    systemd: name=mariadb state=started
+
+         
+
+
+
+# ansible-playbook playbooks/pb1.yml
+
+PLAY [all] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [172.31.47.215]
+ok: [172.31.40.70]
+
+TASK [to install mysql-server] *************************************************
+skipping: [172.31.47.215]
+ok: [172.31.40.70]
+
+TASK [to install mariadb-server] ***********************************************
+skipping: [172.31.40.70]
+changed: [172.31.47.215]
+
+RUNNING HANDLER [start mariadb] ************************************************
+changed: [172.31.47.215]
+
+PLAY RECAP *********************************************************************
+172.31.40.70               : ok=2    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+172.31.47.215              : ok=3    changed=2    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+
+
+                                              Ansible Variables
+                                           ------------------------------
+Static Variables:
+------------------------
+Syntax:
+       vars:
+        - <var1>: <Value-1>
+        - <var2>: <Value-2>
+                    ......
+Ex:
+       vars:
+        - pack1: java
+        - pack2: tomcat
+
+Dynamic Variables:
+-----------------------------
+Syntax:
+       vars_prompt:
+       - name: <var>
+         prompt: <msg>
+         private: <yes / no>
+ Ex:  
+       vars_prompt:
+       - name: file_name
+         prompt: Enter a file name
+         private: no
+
+Ex Playbook:
+-------------------
+# cat playbooks/pb1.yml
+---
+- hosts: all
+  become: true
+  gather_facts: true
+  vars:
+  - pack1: net-tool
+  - pack2: git-core
+  vars_prompt:
+  - name: gname
+    prompt: Enter a Group Name
+    private: yes
+
+  - name: uname
+    prompt: Enter an User Name
+    private: no
+  tasks:
+  - name: to install {{pack1}}
+    package: name={{pack1}} update_cache=yes state=present
+    ignore_errors: yes
+    tags:
+      - devops
+
+  - name: to install {{pack2}}
+    package: name={{pack2}} update_cache=yes state=present
+    ignore_errors: yes
+    tags:
+      - devops
+
+  - name: to add Group {{gname}}
+    group: name={{gname}} state=present
+    ignore_errors: yes
+    tags:
+      - aws
+
+  - name: to add User {{uname}}
+    user: name={{uname}} group={{gname}} state=present
+    ignore_errors: yes
+    tags:
+      - aws
+
+
+ 
+
+root@ip-172-31-37-58:~# ansible-playbook playbooks/pb1.yml
+Enter a Group Name:
+Enter an User Name: sathya
+
+PLAY [all] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [172.31.47.215]
+ok: [172.31.40.70]
+
+TASK [to install net-tool] *****************************************************
+fatal: [172.31.40.70]: FAILED! => {"changed": false, "msg": "No package matching 'net-tool' is available"}
+...ignoring
+fatal: [172.31.47.215]: FAILED! => {"changed": false, "msg": "No package matching 'net-tool' found available, installed or updated", "rc": 126, "results": ["No package matching 'net-tool' found available, installed or updated"]}
+...ignoring
+
+TASK [to install git-core] *****************************************************
+ok: [172.31.40.70]
+ok: [172.31.47.215]
+
+TASK [to add Group devops] *****************************************************
+ok: [172.31.40.70]
+ok: [172.31.47.215]
+
+TASK [to add User sathya] ******************************************************
+changed: [172.31.40.70]
+changed: [172.31.47.215]
+
+PLAY RECAP *********************************************************************
+172.31.40.70               : ok=5    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=1
+172.31.47.215              : ok=5    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=1
+
+
+to Execute a Playbook:
+---------------------------------
+    # ansible-playbook playbooks/pb1.yml
+    # ansible-playbook -e 'pack1=tree pack2=curl gname=aws uname=john' playbooks/pb1.yml
+
+Host Override:
+---------------------
+    # ansible all -i /root/hosts --private-key mykey -m ping
+    # ansible-playbook -i /root/hosts -l ubnt playbooks/pb1.yml
+
+Key Override:
+---------------------
+    # ansible all --private-key mykey -m ping
+    # ansible-playbook -i /root/hosts -l ubnt --private-key /root/mykey playbooks/pb1.yml
+
+
+# ansible-playbook -i /root/hosts -l ubnt --private-key mykey -e 'gname=aws uname=john' playbooks/pb1.yml --start-at-task="to add Group {{gname}}"
+
+# ansible-playbook -i /root/hosts -l ubnt --private-key mykey -e 'pack1=vim pack2=wget' playbooks/pb1.yml --tags "devops"
